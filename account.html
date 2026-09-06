@@ -1,0 +1,614 @@
+<script type="module">
+
+    /* =================================================
+       FIREBASE IMPORTS
+    ================================================= */
+
+    import {
+        initializeApp
+    } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+
+    import {
+        getAuth,
+        createUserWithEmailAndPassword,
+        signInWithEmailAndPassword,
+        updateProfile,
+        setPersistence,
+        browserLocalPersistence,
+        onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
+
+    import {
+        getFirestore,
+        doc,
+        setDoc,
+        serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+
+
+    /* =================================================
+       FIREBASE CONFIG
+    ================================================= */
+
+    const firebaseConfig = {
+
+        apiKey:
+            "AIzaSyBNI4CR26Re0xdh-T0XdVyb6fFN7SPgPNA",
+
+        authDomain:
+            "the-myp-haven.firebaseapp.com",
+
+        projectId:
+            "the-myp-haven",
+
+        storageBucket:
+            "the-myp-haven.firebasestorage.app",
+
+        messagingSenderId:
+            "904577455533",
+
+        appId:
+            "1:904577455533:web:1d918ee8a3caa547eefd24"
+
+    };
+
+
+    /* =================================================
+       INITIALIZE FIREBASE
+    ================================================= */
+
+    const app = initializeApp(firebaseConfig);
+
+    const auth = getAuth(app);
+
+    const db = getFirestore(app);
+
+
+    /* =================================================
+       KEEP USERS LOGGED IN AFTER REFRESH
+    ================================================= */
+
+    await setPersistence(
+        auth,
+        browserLocalPersistence
+    );
+
+
+    /* =================================================
+       ELEMENTS
+    ================================================= */
+
+    const signupForm =
+        document.getElementById("signup-form");
+
+    const loginForm =
+        document.getElementById("login-form");
+
+    const switchButton =
+        document.getElementById("switch-button");
+
+    const switchQuestion =
+        document.getElementById("switch-question");
+
+    const errorMessage =
+        document.getElementById("error-message");
+
+    const successMessage =
+        document.getElementById("success-message");
+
+    const loadingText =
+        document.getElementById("loading-text");
+
+    const signupButton =
+        document.getElementById("signup-button");
+
+    const loginButton =
+        document.getElementById("login-button");
+
+
+    /* =================================================
+       MESSAGES
+    ================================================= */
+
+    function showError(message) {
+
+        errorMessage.textContent = message;
+
+        errorMessage.style.display = "block";
+
+        successMessage.style.display = "none";
+
+    }
+
+
+    function showSuccess(message) {
+
+        successMessage.textContent = message;
+
+        successMessage.style.display = "block";
+
+        errorMessage.style.display = "none";
+
+    }
+
+
+    function clearMessages() {
+
+        errorMessage.style.display = "none";
+
+        successMessage.style.display = "none";
+
+    }
+
+
+    function setLoading(isLoading) {
+
+        signupButton.disabled = isLoading;
+
+        loginButton.disabled = isLoading;
+
+        loadingText.style.display =
+            isLoading ? "block" : "none";
+
+    }
+
+
+    /* =================================================
+       FIREBASE ERROR MESSAGES
+    ================================================= */
+
+    function getFriendlyError(error) {
+
+        console.error(error);
+
+        switch (error.code) {
+
+            case "auth/email-already-in-use":
+                return "An account with this email already exists. Please sign in instead.";
+
+            case "auth/invalid-email":
+                return "Please enter a valid email address.";
+
+            case "auth/weak-password":
+                return "Your password must be at least 6 characters.";
+
+            case "auth/invalid-credential":
+                return "Your email or password is incorrect.";
+
+            case "auth/user-not-found":
+                return "No account was found with this email.";
+
+            case "auth/wrong-password":
+                return "Your password is incorrect.";
+
+            case "auth/network-request-failed":
+                return "There was a network problem. Please check your internet connection.";
+
+            case "permission-denied":
+                return "Firebase could not save your profile. Check your Firestore security rules.";
+
+            default:
+                return error.message || "Something went wrong. Please try again.";
+
+        }
+
+    }
+
+
+    /* =================================================
+       IF ALREADY LOGGED IN
+    ================================================= */
+
+    onAuthStateChanged(auth, user => {
+
+        if (user) {
+
+            /*
+             * Don't redirect immediately if we're
+             * creating an account because the survey
+             * should appear first.
+             */
+
+            console.log(
+                "Firebase user detected:",
+                user.uid
+            );
+
+        }
+
+    });
+
+
+    /* =================================================
+       SWITCH BETWEEN SIGN UP / LOGIN
+    ================================================= */
+
+    let loginMode = false;
+
+
+    switchButton.addEventListener(
+        "click",
+        () => {
+
+            loginMode = !loginMode;
+
+            clearMessages();
+
+
+            if (loginMode) {
+
+                signupForm.style.display = "none";
+
+                loginForm.style.display = "block";
+
+                switchQuestion.textContent =
+                    "Don't have an account?";
+
+                switchButton.textContent =
+                    "Create Account";
+
+            } else {
+
+                signupForm.style.display = "block";
+
+                loginForm.style.display = "none";
+
+                switchQuestion.textContent =
+                    "Already have an account?";
+
+                switchButton.textContent =
+                    "Sign In";
+
+            }
+
+        }
+    );
+
+
+    /* =================================================
+       CREATE ACCOUNT
+    ================================================= */
+
+    signupForm.addEventListener(
+        "submit",
+        async event => {
+
+            event.preventDefault();
+
+            clearMessages();
+
+
+            const name =
+                document
+                    .getElementById("signup-name")
+                    .value
+                    .trim();
+
+            const email =
+                document
+                    .getElementById("signup-email")
+                    .value
+                    .trim()
+                    .toLowerCase();
+
+            const password =
+                document
+                    .getElementById("signup-password")
+                    .value;
+
+            const confirmPassword =
+                document
+                    .getElementById("signup-confirm-password")
+                    .value;
+
+            const termsAccepted =
+                document
+                    .getElementById("terms-checkbox")
+                    .checked;
+
+
+            /* VALIDATION */
+
+            if (name.length < 2) {
+
+                showError(
+                    "Please enter your full name."
+                );
+
+                return;
+
+            }
+
+
+            if (password.length < 6) {
+
+                showError(
+                    "Your password must be at least 6 characters."
+                );
+
+                return;
+
+            }
+
+
+            if (password !== confirmPassword) {
+
+                showError(
+                    "Your passwords do not match."
+                );
+
+                return;
+
+            }
+
+
+            if (!termsAccepted) {
+
+                showError(
+                    "Please agree to the Terms and Privacy Policy."
+                );
+
+                return;
+
+            }
+
+
+            setLoading(true);
+
+
+            try {
+
+                /* -----------------------------------------
+                   CREATE AUTH ACCOUNT
+                ----------------------------------------- */
+
+                const userCredential =
+                    await createUserWithEmailAndPassword(
+                        auth,
+                        email,
+                        password
+                    );
+
+
+                const user =
+                    userCredential.user;
+
+
+                console.log(
+                    "ACCOUNT CREATED:",
+                    user.uid
+                );
+
+
+                /* -----------------------------------------
+                   SAVE DISPLAY NAME
+                ----------------------------------------- */
+
+                await updateProfile(
+                    user,
+                    {
+                        displayName: name
+                    }
+                );
+
+
+                /* -----------------------------------------
+                   CREATE FIRESTORE USER DOCUMENT
+                ----------------------------------------- */
+
+                await setDoc(
+                    doc(
+                        db,
+                        "users",
+                        user.uid
+                    ),
+                    {
+
+                        uid: user.uid,
+
+                        fullName: name,
+
+                        email: email,
+
+                        mypYear: null,
+
+                        subjects: [],
+
+                        surveyCompleted: false,
+
+                        lockedIn: false,
+
+                        termsAccepted: true,
+
+                        createdAt:
+                            serverTimestamp(),
+
+                        updatedAt:
+                            serverTimestamp()
+
+                    },
+                    {
+                        merge: true
+                    }
+                );
+
+
+                console.log(
+                    "USER PROFILE SAVED TO FIRESTORE"
+                );
+
+
+                showSuccess(
+                    `Welcome to MYP Haven, ${name}!`
+                );
+
+
+                /*
+                 * Save a temporary local copy of the
+                 * user's name. Firebase remains the
+                 * main source of truth.
+                 */
+
+                localStorage.setItem(
+                    "mypHavenName",
+                    name
+                );
+
+
+                /* -----------------------------------------
+                   GO TO SURVEY
+                ----------------------------------------- */
+
+                setTimeout(
+                    () => {
+
+                        window.location.href =
+                            "./survey.html";
+
+                    },
+                    800
+                );
+
+
+            } catch (error) {
+
+                console.error(
+                    "SIGN UP ERROR:",
+                    error
+                );
+
+                showError(
+                    getFriendlyError(error)
+                );
+
+                setLoading(false);
+
+            }
+
+        }
+    );
+
+
+    /* =================================================
+       SIGN IN
+    ================================================= */
+
+    loginForm.addEventListener(
+        "submit",
+        async event => {
+
+            event.preventDefault();
+
+            clearMessages();
+
+            setLoading(true);
+
+
+            const email =
+                document
+                    .getElementById("login-email")
+                    .value
+                    .trim()
+                    .toLowerCase();
+
+            const password =
+                document
+                    .getElementById("login-password")
+                    .value;
+
+
+            try {
+
+                /* -----------------------------------------
+                   LOGIN
+                ----------------------------------------- */
+
+                const userCredential =
+                    await signInWithEmailAndPassword(
+                        auth,
+                        email,
+                        password
+                    );
+
+
+                const user =
+                    userCredential.user;
+
+
+                console.log(
+                    "LOGIN SUCCESS:",
+                    user.uid
+                );
+
+
+                /* -----------------------------------------
+                   MAKE SURE FIRESTORE USER DOCUMENT
+                   EXISTS
+                ----------------------------------------- */
+
+                await setDoc(
+                    doc(
+                        db,
+                        "users",
+                        user.uid
+                    ),
+                    {
+
+                        uid:
+                            user.uid,
+
+                        email:
+                            user.email,
+
+                        fullName:
+                            user.displayName || "",
+
+                        updatedAt:
+                            serverTimestamp()
+
+                    },
+                    {
+                        merge: true
+                    }
+                );
+
+
+                showSuccess(
+                    `Welcome back, ${user.displayName || "to MYP Haven"}!`
+                );
+
+
+                /* -----------------------------------------
+                   GO TO DASHBOARD
+                ----------------------------------------- */
+
+                setTimeout(
+                    () => {
+
+                        window.location.href =
+                            "./dashboard.html";
+
+                    },
+                    500
+                );
+
+
+            } catch (error) {
+
+                console.error(
+                    "LOGIN ERROR:",
+                    error
+                );
+
+                showError(
+                    getFriendlyError(error)
+                );
+
+                setLoading(false);
+
+            }
+
+        }
+    );
+
+</script>
